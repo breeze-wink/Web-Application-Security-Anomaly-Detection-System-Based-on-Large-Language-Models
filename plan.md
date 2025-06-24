@@ -55,7 +55,7 @@ Web管理界面使用Vue3开发，包括事件列表页面、统计图表页面�
 ### 🧠 核心技术栈
 - **后端框架**：Python + FastAPI
 - **大语言模型**：OpenAI API (GPT-3.5/4) + 备选国产API
-- **数据库**：PostgreSQL (事件存储) + Redis (实时统计)
+- **数据库**：MySQL (事件存储) + Redis (实时统计)
 - **前端**：Vue 3 + Element Plus
 - **部署**：Docker + Docker Compose
 
