@@ -1,61 +1,114 @@
 """系统配置设置"""
 
 import os
+import yaml
 from typing import Optional, List
 from pydantic import BaseSettings, Field
+from pathlib import Path
+
+def load_config_file(config_path: str = "config.yaml") -> dict:
+    """加载配置文件"""
+    config_file = Path(config_path)
+    
+    # 如果配置文件不存在，使用默认配置
+    if not config_file.exists():
+        print(f"配置文件 {config_path} 不存在，使用默认配置")
+        return {}
+    
+    try:
+        with open(config_file, 'r', encoding='utf-8') as f:
+            config_data = yaml.safe_load(f) or {}
+            print(f"成功加载配置文件: {config_path}")
+            return config_data
+    except Exception as e:
+        print(f"加载配置文件失败: {e}")
+        return {}
+
+# 全局配置数据
+CONFIG_DATA = load_config_file()
 
 class DatabaseSettings(BaseSettings):
     """数据库配置"""
-    url: str = Field(default="sqlite:///security_events.db", env="DATABASE_URL")
-    echo: bool = Field(default=False, env="DATABASE_ECHO")
-    pool_size: int = Field(default=10, env="DATABASE_POOL_SIZE")
-    max_overflow: int = Field(default=20, env="DATABASE_MAX_OVERFLOW")
+    url: str = Field(default="sqlite:///security_events.db")
+    echo: bool = Field(default=False)
+    pool_size: int = Field(default=10)
+    max_overflow: int = Field(default=20)
+    
+    def __init__(self, **kwargs):
+        # 从配置文件读取数据库配置
+        db_config = CONFIG_DATA.get('database', {})
+        super().__init__(**{**db_config, **kwargs})
 
 class RedisSettings(BaseSettings):
     """Redis配置"""
-    url: str = Field(default="redis://localhost:6379/0", env="REDIS_URL")
-    password: Optional[str] = Field(default=None, env="REDIS_PASSWORD")
-    max_connections: int = Field(default=50, env="REDIS_MAX_CONNECTIONS")
+    url: str = Field(default="redis://localhost:6379/0")
+    password: Optional[str] = Field(default=None)
+    max_connections: int = Field(default=50)
+    
+    def __init__(self, **kwargs):
+        # 从配置文件读取Redis配置
+        redis_config = CONFIG_DATA.get('redis', {})
+        super().__init__(**{**redis_config, **kwargs})
 
 class LLMSettings(BaseSettings):
     """LLM配置"""
-    provider: str = Field(default="openai", env="LLM_PROVIDER")
-    api_key: str = Field(default="", env="OPENAI_API_KEY")
-    model: str = Field(default="gpt-3.5-turbo", env="LLM_MODEL")
-    daily_limit: int = Field(default=1000, env="LLM_DAILY_LIMIT")
-    enable_cache: bool = Field(default=True, env="LLM_ENABLE_CACHE")
-    cache_ttl: int = Field(default=3600, env="LLM_CACHE_TTL")
+    provider: str = Field(default="openai")
+    api_key: str = Field(default="")
+    model: str = Field(default="gpt-3.5-turbo")
+    daily_limit: int = Field(default=1000)
+    enable_cache: bool = Field(default=True)
+    cache_ttl: int = Field(default=3600)
+    
+    def __init__(self, **kwargs):
+        # 从配置文件读取LLM配置
+        llm_config = CONFIG_DATA.get('llm', {})
+        super().__init__(**{**llm_config, **kwargs})
 
 class DetectionSettings(BaseSettings):
     """检测配置"""
-    confidence_threshold: float = Field(default=0.8, env="DETECTION_CONFIDENCE_THRESHOLD")
-    enable_sql_detection: bool = Field(default=True, env="ENABLE_SQL_DETECTION")
-    enable_xss_detection: bool = Field(default=True, env="ENABLE_XSS_DETECTION")
-    enable_cmd_detection: bool = Field(default=True, env="ENABLE_CMD_DETECTION")
-    max_request_size: int = Field(default=1024*1024, env="MAX_REQUEST_SIZE")
+    confidence_threshold: float = Field(default=0.8)
+    enable_sql_detection: bool = Field(default=True)
+    enable_xss_detection: bool = Field(default=True)
+    enable_cmd_detection: bool = Field(default=True)
+    max_request_size: int = Field(default=1024*1024)
+    
+    def __init__(self, **kwargs):
+        # 从配置文件读取检测配置
+        detection_config = CONFIG_DATA.get('detection', {})
+        super().__init__(**{**detection_config, **kwargs})
 
 class APISettings(BaseSettings):
     """API配置"""
-    host: str = Field(default="0.0.0.0", env="API_HOST")
-    port: int = Field(default=8000, env="API_PORT")
-    debug: bool = Field(default=False, env="API_DEBUG")
-    cors_origins: List[str] = Field(default=["*"], env="CORS_ORIGINS")
-    rate_limit: str = Field(default="100/minute", env="API_RATE_LIMIT")
+    host: str = Field(default="0.0.0.0")
+    port: int = Field(default=8000)
+    debug: bool = Field(default=False)
+    cors_origins: List[str] = Field(default=["*"])
+    rate_limit: str = Field(default="100/minute")
+    
+    def __init__(self, **kwargs):
+        # 从配置文件读取API配置
+        api_config = CONFIG_DATA.get('api', {})
+        super().__init__(**{**api_config, **kwargs})
 
 class LoggingSettings(BaseSettings):
     """日志配置"""
-    level: str = Field(default="INFO", env="LOG_LEVEL")
-    format: str = Field(default="%(asctime)s - %(name)s - %(levelname)s - %(message)s", env="LOG_FORMAT")
-    file_path: Optional[str] = Field(default=None, env="LOG_FILE_PATH")
-    max_bytes: int = Field(default=10*1024*1024, env="LOG_MAX_BYTES")
-    backup_count: int = Field(default=5, env="LOG_BACKUP_COUNT")
+    level: str = Field(default="INFO")
+    format: str = Field(default="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    file_path: Optional[str] = Field(default=None)
+    max_bytes: int = Field(default=10*1024*1024)
+    backup_count: int = Field(default=5)
+    
+    def __init__(self, **kwargs):
+        # 从配置文件读取日志配置
+        logging_config = CONFIG_DATA.get('logging', {})
+        super().__init__(**{**logging_config, **kwargs})
 
 class Settings(BaseSettings):
     """主配置类"""
     
     # 环境配置
-    environment: str = Field(default="development", env="ENVIRONMENT")
-    secret_key: str = Field(default="your-secret-key-here", env="SECRET_KEY")
+    environment: str = Field(default="development")
+    secret_key: str = Field(default="your-secret-key-here")
     
     # 各模块配置
     database: DatabaseSettings = DatabaseSettings()
@@ -66,12 +119,20 @@ class Settings(BaseSettings):
     logging: LoggingSettings = LoggingSettings()
     
     # 数据清理配置
-    data_retention_days: int = Field(default=90, env="DATA_RETENTION_DAYS")
-    cleanup_schedule: str = Field(default="0 2 * * *", env="CLEANUP_SCHEDULE")  # 每天凌晨2点
+    data_retention_days: int = Field(default=90)
+    cleanup_schedule: str = Field(default="0 2 * * *")  # 每天凌晨2点
+    
+    def __init__(self, **kwargs):
+        # 从配置文件读取主配置
+        main_config = {
+            'environment': CONFIG_DATA.get('environment', 'development'),
+            'secret_key': CONFIG_DATA.get('secret_key', 'your-secret-key-here'),
+            'data_retention_days': CONFIG_DATA.get('data_retention_days', 90),
+            'cleanup_schedule': CONFIG_DATA.get('cleanup_schedule', '0 2 * * *'),
+        }
+        super().__init__(**{**main_config, **kwargs})
     
     class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
         case_sensitive = False
 
 # 全局配置实例

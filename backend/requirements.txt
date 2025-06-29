@@ -39,6 +39,7 @@ python-jose[cryptography]==3.3.0  # JWT处理
 passlib[bcrypt]==1.7.4  # 密码处理
 python-dotenv==1.0.0  # 环境变量
 click==8.1.7  # 命令行工具
+PyYAML==6.0.1  # YAML配置文件解析
 
 # 测试相关
 pytest==7.4.3
