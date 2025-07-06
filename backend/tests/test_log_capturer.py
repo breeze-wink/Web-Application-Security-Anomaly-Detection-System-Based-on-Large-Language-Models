@@ -33,8 +33,8 @@ class TestLogFileCapturer:
             # POST请求
             '10.0.0.1 - admin [25/Dec/2023:10:01:30 +0800] "POST /admin/login.php HTTP/1.1" 302 0 "http://example.com/admin" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"',
             
-            # 带SQL注入尝试的GET请求 - 使用URL编码避免空格问题
-            '192.168.1.50 - - [25/Dec/2023:10:02:15 +0800] "GET /search.php?q=%27%20OR%201=1-- HTTP/1.1" 200 2048 "-" "sqlmap/1.6.12"',
+            # 带SQL注入尝试的GET请求
+            '192.168.1.50 - - [25/Dec/2023:10:02:15 +0800] "GET /search.php?q=\' OR 1=1-- HTTP/1.1" 200 2048 "-" "sqlmap/1.6.12"',
             
             # XSS尝试
             '203.0.113.10 - - [25/Dec/2023:10:03:00 +0800] "GET /comment.php?msg=<script>alert(1)</script> HTTP/1.1" 200 512 "http://evil.com" "curl/7.68.0"',
@@ -44,7 +44,7 @@ class TestLogFileCapturer:
         ]
     
     @pytest.fixture
-    def temp_log_file(self, sample_log_lines):
+    async def temp_log_file(self, sample_log_lines):
         """创建临时日志文件用于测试"""
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.log') as f:
             for line in sample_log_lines:
@@ -130,23 +130,14 @@ class TestLogFileCapturer:
         """测试解析包含SQL注入的日志行"""
         capturer = LogFileCapturer("/dummy/path")
         
-        # 使用URL编码的SQL注入字符串
-        log_line = '192.168.1.50 - - [25/Dec/2023:10:02:15 +0800] "GET /search.php?q=%27%20OR%201=1-- HTTP/1.1" 200 2048 "-" "sqlmap/1.6.12"'
+        log_line = '192.168.1.50 - - [25/Dec/2023:10:02:15 +0800] "GET /search.php?q=\' OR 1=1-- HTTP/1.1" 200 2048 "-" "sqlmap/1.6.12"'
         
         request = capturer._parse_log_line(log_line)
         
-        # 如果解析失败，打印调试信息
-        if request is None:
-            print(f"解析失败的日志行: {log_line}")
-        else:
-            print(f"✅ 成功解析SQL注入日志: {request.url}")
-            print(f"   参数: {request.params}")
-        
-        # 验证解析成功
-        assert request is not None, f"SQL注入日志行解析失败: {log_line}"
+        assert request is not None
         assert request.method == "GET"
-        assert "/search.php" in request.url
-        assert "q=%27%20OR%201=1--" in request.url  # URL编码的SQL注入
+        assert request.url == "/search.php?q=' OR 1=1--"
+        assert request.params == {"q": "' OR 1=1--"}
         assert request.user_agent == "sqlmap/1.6.12"
 
     def test_parse_log_line_with_xss(self):
@@ -212,9 +203,8 @@ class TestLogFileCapturer:
                 break
             requests.append(request)
         
-        # 修正：应该捕获到所有有效请求（可能有些格式无法解析）
-        assert len(requests) >= 4, f"应该至少捕获到4个请求，实际捕获了{len(requests)}个"
-        assert len(requests) <= 5, f"最多应该捕获5个请求，实际捕获了{len(requests)}个"
+        # 应该捕获到5个请求（对应sample_log_lines中的5行）
+        assert len(requests) == 5
         
         # 再次尝试读取应该返回None
         request = await capturer.capture_single()
@@ -240,27 +230,22 @@ class TestLogFileCapturer:
         async for request in capturer.capture_stream():
             requests.append(request)
         
-        # 修正：应该捕获到所有有效的请求（可能有些格式无法解析）
-        assert len(requests) >= 4, f"应该至少捕获到4个请求，实际捕获了{len(requests)}个"
-        assert len(requests) <= 5, f"最多应该捕获5个请求，实际捕获了{len(requests)}个"
+        # 应该捕获到所有有效的请求
+        assert len(requests) == 5
         
         # 验证第一个请求
         first_request = requests[0]
         assert first_request.method == "GET"
         assert first_request.source_ip == "192.168.1.100"
         
-        # 验证包含SQL注入的请求（如果解析成功的话）
-        sql_requests = [r for r in requests if "OR%201=1" in r.url or "OR 1=1" in r.url]
-        if sql_requests:
-            sql_injection_request = sql_requests[0]
-            print(f"🚨 发现SQL注入请求: {sql_injection_request.url}")
-            assert ("OR%201=1" in sql_injection_request.url or "OR 1=1" in sql_injection_request.url)
+        # 验证包含SQL注入的请求
+        sql_injection_request = requests[2]
+        assert "' OR 1=1--" in sql_injection_request.url
 
     @pytest.mark.asyncio
     async def test_capture_stream_follow_mode(self, temp_log_file):
         """测试实时跟踪模式（简化版）"""
-        # follow=False模式测试，避免等待新数据的复杂性
-        capturer = LogFileCapturer(temp_log_file, follow=False)
+        capturer = LogFileCapturer(temp_log_file, follow=True)
         await capturer.start_capture()
         
         # 创建一个任务来捕获流
@@ -271,20 +256,18 @@ class TestLogFileCapturer:
             async for request in capturer.capture_stream():
                 requests.append(request)
                 count += 1
-                print(f"📄 follow模式捕获 #{count}: {request.method} {request.url}")
                 if count >= 3:  # 只捕获前3个请求然后停止
                     await capturer.stop_capture()
                     break
         
-        # 运行捕获任务，设置较短的超时
+        # 运行捕获任务，设置超时防止无限等待
         try:
-            await asyncio.wait_for(capture_task(), timeout=1.0)
+            await asyncio.wait_for(capture_task(), timeout=2.0)
         except asyncio.TimeoutError:
             await capturer.stop_capture()
         
         # 应该至少捕获到一些请求
-        print(f"📊 follow模式总共捕获了 {len(requests)} 个请求")
-        assert len(requests) >= 1, f"follow模式应该至少捕获到1个请求，实际捕获了{len(requests)}个"
+        assert len(requests) > 0
 
     @pytest.mark.asyncio
     async def test_start_stop_capture(self, capturer):

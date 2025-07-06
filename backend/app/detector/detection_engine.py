@@ -2,9 +2,7 @@
 
 from typing import List, Dict, Any
 from .base import BaseDetector
-from .sql_injection_detector import SQLInjectionDetector
-from .xss_detector import XSSDetector
-from .command_injection_detector import CommandInjectionDetector
+from .coraza_detector import CorazaDetector
 from app.core.models import HTTPRequest, DetectionResult, AttackType
 from app.core.exceptions import DetectionException
 
@@ -15,11 +13,13 @@ class DetectionEngine:
         if custom_detectors:
             self.detectors = custom_detectors
         else:
-            # 默认检测器
+            # 默认检测器：Coraza作为主力，传统检测器作为补充
             self.detectors = [
-                SQLInjectionDetector(),
-                XSSDetector(),
-                CommandInjectionDetector(),
+                CorazaDetector(),              # 主力：企业级WAF检测器
+                # 以下为原有检测器，用于特定场景或对比测试
+                # SQLInjectionDetector(),     # 可选：传统SQL注入检测
+                # XSSDetector(),              # 可选：传统XSS检测  
+                # CommandInjectionDetector(), # 可选：传统命令注入检测
             ]
     
     def detect_all(self, request: HTTPRequest) -> DetectionResult:
